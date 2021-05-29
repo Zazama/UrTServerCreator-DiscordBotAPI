@@ -1,0 +1,43 @@
+{
+  "name": "quake3-rcon",
+  "version": "1.0.2",
+  "description": "A tiny library for using Quake 3's RCON server feature, including an command-line interface.",
+  "homepage": "https://github.com/thbaumbach/node-quake3-rcon",
+  "readmeFilename": "README.md",
+  "scripts": {
+    "start": "node ./bin/quake3-rcon",
+    "test": "echo no tests yet"
+  },
+  "preferGlobal": true,
+  "bin": {
+    "quake3-rcon": "bin/quake3-rcon"
+  },
+  "main": "src/rcon",
+  "directories": {
+    "lib": "src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thbaumbach/node-quake3-rcon"
+  },
+  "bugs": {
+    "url": "https://github.com/thbaumbach/node-quake3-rcon/issues"
+  },
+  "dependencies": {},
+  "keywords": [
+    "quake",
+    "quake3",
+    "q3",
+    "q3a",
+    "rcon",
+    "remote",
+    "console",
+    "server",
+    "network",
+    "library",
+    "cli",
+    "command"
+  ],
+  "author": "Thomas Baumbach <tom@xolo.pw>",
+  "license": "MIT"
+}

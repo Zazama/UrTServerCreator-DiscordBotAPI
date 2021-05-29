@@ -1,0 +1,11 @@
+{
+  "username": "",
+  "password": "",
+  "database": "",
+  "host": "127.0.0.1",
+  "port": 3310,
+  "dialect": "mysql",
+  "bearer_secret": "ksVkK7QOh2UO2Hy5HmVbeu889oJW7TKzdlYHvaUIcqncFU8v8X",
+  "default_password": "YOUSHALLPASS13",
+  "default_refpass": "YOUSHALLPASS13"
+}
