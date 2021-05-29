@@ -6,7 +6,7 @@ module.exports = {
         allowNull: false,
         unique: true,
         primaryKey: true,
-        type: Sequelize.BIGINT
+        type: Sequelize.STRING
       },
       discordApiLastFetchedAt: {
         allowNull: false,

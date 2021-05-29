@@ -15,7 +15,7 @@ module.exports = (sequelize, DataTypes) => {
   };
   User.init({
     discordId: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.STRING,
       primaryKey: true
     },
     discordApiLastFetchedAt: DataTypes.DATE

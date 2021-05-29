@@ -10,7 +10,7 @@ module.exports = {
       },
       discordServerId: {
         allowNull: false,
-        type: Sequelize.BIGINT
+        type: Sequelize.STRING
       },
       ip: {
         allowNull: false,

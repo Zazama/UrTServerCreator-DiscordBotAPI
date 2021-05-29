@@ -32,6 +32,7 @@ discordBotRouter.use('/server/:discordServerId', discordServerBotRouter)
 discordServerBotRouter.use(async (req, res, next) => {
   try {
     let discordServer = await DiscordServer.findOne({ where: { discordId: req.params.discordServerId }})
+    console.log(discordServer)
     if(!discordServer) {
       await DiscordServer.create({
         discordId: req.params.discordServerId
@@ -355,7 +356,7 @@ async function stopOvertimeServers() {
         where: {
           status: 'IN_USE',
           updatedAt: {
-            [Sequelize.Op.lt]: Sequelize.literal(`NOW() - INTERVAL 10 MINUTE`)
+            [Sequelize.Op.lt]: new Date(Date.now() - (2 * 60 * 60 * 1000))
           }
         }
       }
@@ -394,7 +395,7 @@ async function freeFailedServers() {
             {
               status: 'FAILED3',
               updatedAt: {
-                [Sequelize.Op.lt]: Sequelize.literal(`NOW() - INTERVAL 120 MINUTE`)
+                [Sequelize.Op.lt]: new Date(Date.now() - (2 * 60 * 60 * 1000))
               }
             }
           ]

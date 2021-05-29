@@ -10,10 +10,10 @@ module.exports = {
       },
       urtServerDiscordId: {
         allowNull: false,
-        type: Sequelize.BIGINT
+        type: Sequelize.STRING
       },
       userDiscordId: {
-        type: Sequelize.BIGINT
+        type: Sequelize.STRING
       },
       status: {
         allowNull: false,

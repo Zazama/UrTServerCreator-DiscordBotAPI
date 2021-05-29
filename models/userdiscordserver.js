@@ -13,8 +13,8 @@ module.exports = (sequelize, DataTypes) => {
     }
   };
   UserDiscordServer.init({
-    userDiscordId: DataTypes.BIGINT,
-    serverDiscordId: DataTypes.BIGINT
+    userDiscordId: DataTypes.STRING,
+    serverDiscordId: DataTypes.STRING
   }, {
     sequelize,
     modelName: 'UserDiscordServer',

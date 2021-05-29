@@ -18,7 +18,7 @@ module.exports = (sequelize, DataTypes) => {
   UrTServerStatus.init({
     urtServerId: DataTypes.INTEGER,
     status: DataTypes.STRING,
-    userDiscordId: DataTypes.BIGINT,
+    userDiscordId: DataTypes.STRING,
     password: DataTypes.STRING(50),
     refpass: DataTypes.STRING(50)
   }, {

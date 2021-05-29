@@ -9,10 +9,10 @@ module.exports = {
         type: Sequelize.INTEGER
       },
       userDiscordId: {
-        type: Sequelize.BIGINT
+        type: Sequelize.STRING
       },
       serverDiscordId: {
-        type: Sequelize.BIGINT
+        type: Sequelize.STRING
       },
       createdAt: {
         allowNull: false,

@@ -15,7 +15,6 @@ module.exports = {
     await queryInterface.removeColumn('UrTServerStatuses', 'urtServerDiscordId')
     await queryInterface.addColumn('UrTServerStatuses', 'urtServerId', {
       allowNull: false,
-      unique: true,
       onDelete: "CASCADE",
       references: {
         model: 'UrTServers',

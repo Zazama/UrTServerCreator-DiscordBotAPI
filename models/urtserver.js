@@ -17,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
     }
   };
   UrTServer.init({
-    discordServerId: DataTypes.BIGINT,
+    discordServerId: DataTypes.STRING,
     ip: DataTypes.STRING,
     port: DataTypes.INTEGER,
     rconpassword: DataTypes.STRING,

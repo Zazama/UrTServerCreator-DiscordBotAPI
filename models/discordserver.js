@@ -16,7 +16,7 @@ module.exports = (sequelize, DataTypes) => {
   };
   DiscordServer.init({
     discordId: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.STRING,
       primaryKey: true
     },
     name: DataTypes.STRING,
