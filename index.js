@@ -32,7 +32,6 @@ discordBotRouter.use('/server/:discordServerId', discordServerBotRouter)
 discordServerBotRouter.use(async (req, res, next) => {
   try {
     let discordServer = await DiscordServer.findOne({ where: { discordId: req.params.discordServerId }})
-    console.log(discordServer)
     if(!discordServer) {
       await DiscordServer.create({
         discordId: req.params.discordServerId
