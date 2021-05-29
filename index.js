@@ -106,7 +106,7 @@ discordServerBotRouter.post(
 
 discordServerBotRouter.post(
   '/pool',
-  body('ip').isIP(4).withMessage('IP_ADDRESS_INVALID'),
+  body('ip').isString().withMessage('IP_ADDRESS_INVALID'),
   body('port').isPort().withMessage('PORT_INVALID'),
   body('rconpassword').trim().isString().withMessage('RCON_INVALID').isLength({ min: 3 }).withMessage('RCON_INVALID'),
   body('region').optional().trim().isString().withMessage('INVALID_REGION'),

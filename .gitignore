@@ -6,8 +6,9 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
+package-lock.json
 config/config.json
+*.sqlite3
 
 # Runtime data
 pids
