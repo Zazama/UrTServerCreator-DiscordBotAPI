@@ -209,8 +209,8 @@ discordServerBotRouter.post(
             done('NO_SERVER_AVAILABLE')
             return
           }
-          const refpass = (await crypto.randomBytes(8)).toString('hex')
-          const password = (await crypto.randomBytes(8)).toString('hex')
+          const refpass = (await crypto.randomBytes(config.refpass_length)).toString('hex').substring(config.refpass_length)
+          const password = (await crypto.randomBytes(config.password_length)).toString('hex').substring(config.password_length)
           await server.UrTServerStatus.update({
             status: 'QUEUEING',
             userDiscordId: req.body.userDiscordId,
@@ -318,6 +318,12 @@ function startQueuingServer(server) {
       await rcon.send(`g_refpass ${server.UrTServerStatus.refpass}`)
       await rcon.send('map ut4_casa')
       await rcon.send('reload')
+
+      if(config.server_start_commands) {
+        for(let command of config.server_start_commands) {
+          await rcon.send(command)
+        }
+      }
 
       done(null, server)
     } catch(e) {
@@ -451,6 +457,43 @@ async function freeServer(server) {
         updatedAt: new Date()
       })
     }  catch(e) {
+      console.error(e)
+    }
+  }
+}
+
+if(config.say_remaining_time_interval && config.say_remaining_time_interval > 0) {
+  setInterval(sayRemainingTime, config.say_remaining_time_interval * 1000 * 60)
+}
+
+async function sayRemainingTime() {
+  const servers = await UrTServer.findAll({
+    include: [
+      {
+        model: UrTServerStatus,
+        where: {
+          status: 'IN_USE',
+          updatedAt: {
+            [Sequelize.Op.gt]: new Date(Date.now() - (2 * 60 * 60 * 1000))
+          }
+        }
+      }
+    ]
+  })
+
+  for(let server of servers) {
+    try {
+      const rcon = new Q3RCon({
+        address: server.ip,
+        port: server.port,
+        password: server.rconpassword,
+        timeout: 3000
+      })
+
+      let remaining = server.UrTServerStatus.updatedAt.getTime() - (Date.now() - (2 * 60 * 60 * 1000))
+
+      await rcon.send(`say Time left: ${ Math.floor(remaining / 1000 / 60) } minutes.`)
+    } catch(e) {
       console.error(e)
     }
   }

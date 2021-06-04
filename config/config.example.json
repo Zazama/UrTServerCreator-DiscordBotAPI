@@ -7,5 +7,9 @@
   "dialect": "mysql",
   "bearer_secret": "ksVkK7QOh2UO2Hy5HmVbeu889oJW7TKzdlYHvaUIcqncFU8v8X",
   "default_password": "YOUSHALLPASS13",
-  "default_refpass": "YOUSHALLPASS13"
+  "default_refpass": "YOUSHALLPASS13",
+  "server_start_commands": ["g_refNoBan 1", "g_referee 1", "g_refNoExec 0"],
+  "password_length": 16,
+  "refpass_length": 16,
+  "say_remaining_time_interval": 0
 }
