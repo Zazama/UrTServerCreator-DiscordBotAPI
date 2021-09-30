@@ -2,7 +2,6 @@ const express = require('express')
 const cors = require('cors')
 const { body, validationResult } = require('express-validator')
 const AsyncLock = require('async-lock')
-const Q3RCon = require('./rcon-promised')
 const crypto = require('crypto')
 const app = express()
 const port = 3005
@@ -52,14 +51,7 @@ discordServerBotRouter.use(async (req, res, next) => {
 
 discordServerBotRouter.get('/pool', async (req, res) => {
   try {
-    return res.json(
-      await req.discordServer.getUrTServers({
-        include: [
-          {
-            model: UrTServerStatus
-          }
-        ]
-      }))
+    return res.json(await req.discordServer.getUrTServers())
   } catch(e) {
     console.error(e)
     return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR' })
@@ -86,15 +78,8 @@ discordServerBotRouter.post(
         return res.status(404).json({})
       }
 
-      const rcon = new Q3RCon({
-        address: server.ip,
-        port: server.port,
-        password: server.rconpassword,
-        timeout: 5000
-      })
-
       return res.status(200).json({
-        data: await rcon.send(req.body.command)
+        data: await server.sendRconCommand(req.body.command)
       })
     } catch(e) {
       console.error(e)
@@ -107,7 +92,7 @@ discordServerBotRouter.post(
   '/pool',
   body('ip').isString().withMessage('IP_ADDRESS_INVALID'),
   body('port').isPort().withMessage('PORT_INVALID'),
-  body('rconpassword').trim().isString().withMessage('RCON_INVALID').isLength({ min: 3 }).withMessage('RCON_INVALID'),
+  body('rconpassword').trim().isString().withMessage('RCON_INVALID').isLength({ min: 1 }).withMessage('RCON_INVALID'),
   body('region').optional().trim().isString().withMessage('INVALID_REGION'),
   async (req, res) => {
     const errors = validationResult(req)
@@ -127,9 +112,7 @@ discordServerBotRouter.post(
           status: 'AVAILABLE'
         }
       }, {
-        include: [{
-          model: UrTServerStatus
-        }]
+        include: { association: 'UrTServerStatus' }
       })
       return res.json({
         id: server.id,
@@ -175,45 +158,20 @@ discordServerBotRouter.post(
     discordBotLock
       .acquire(req.discordServer.discordId, async (done) => {
         try {
-          const alreadyExisting = await UrTServer.findOne({
-            where: { discordServerId: req.discordServer.discordId },
-            include: [
-              {
-                model: UrTServerStatus,
-                where: {
-                  status: {
-                    [Sequelize.Op.notIn]: ['FAILED1', 'FAILED2', 'FAILED3', 'AVAILABLE']
-                  },
-                  userDiscordId: req.body.userDiscordId
-                }
-              }
-            ]
-          })
-          if(alreadyExisting) {
+          if(await req.discordServer.findActiveByUserDiscordId(req.body.userDiscordId)) {
             done('ALREADY_REQUESTED_SERVER')
             return
           }
 
-          let requirements = {
-            discordServerId: req.discordServer.discordId
-          }
-          if(req.body.region) {
-            requirements.region = req.body.region.toUpperCase()
-          }
-
-          const server = await UrTServer.findOne({
-            where: requirements,
-            include: [{model: UrTServerStatus, where: { status: 'AVAILABLE' }}]
-          })
+          const server = await req.discordServer.findOneAvailableServerByRegion(req.body.region)
           if (!server) {
             done('NO_SERVER_AVAILABLE')
             return
           }
-          const refpass = (await crypto.randomBytes(config.refpass_length)).toString('hex').substring(config.refpass_length)
-          const password = (await crypto.randomBytes(config.password_length)).toString('hex').substring(config.password_length)
-          await server.UrTServerStatus.update({
-            status: 'QUEUEING',
-            userDiscordId: req.body.userDiscordId,
+
+          const refpass = await generateRefpass()
+          const password = await generatePassword()
+          await server.queueForUser(req.body.userDiscordId, {
             password,
             refpass
           })
@@ -242,23 +200,15 @@ discordServerBotRouter.post(
     }
 
     try {
-      const server = await UrTServer.findOne({
-        include: [
-          {
-            model: UrTServerStatus,
-            where: {
-              status: 'IN_USE',
-              userDiscordId: req.body.userDiscordId
-            }
-          }
-        ]
-      })
+      const server = await req.discordServer.findInUseByUserDiscordId(req.body.userDiscordId)
 
       if(!server) {
         return res.status(404).json({})
       }
 
-      freeServer(server).then(() => {}).catch(() => {})
+      await server.UrTServerStatus.update({
+        status: 'AFTER_USE'
+      })
 
       return res.json({})
     } catch(e) {
@@ -270,7 +220,7 @@ discordServerBotRouter.post(
 discordBotRouter.get('/collect', async (req, res) => {
   try {
     const servers = await UrTServer.findAll({
-      include: [{ model: UrTServerStatus, where: { status: 'READY' } }]
+      include: { association: 'UrTServerStatus', where: { status: 'READY' } }
     })
     await UrTServerStatus.update({ status: 'IN_USE' }, {
       where: {
@@ -294,8 +244,7 @@ function startQueuingServer(server) {
     server = await UrTServer.findOne({
       where: {
         id: server.id
-      },
-      include: [{ model: UrTServerStatus }]
+      }
     })
     if(!server || server.UrTServerStatus.status !== 'QUEUEING') {
       done()
@@ -306,41 +255,28 @@ function startQueuingServer(server) {
     })
 
     try {
-      const rcon = new Q3RCon({
-        address: server.ip,
-        port: server.port,
-        password: server.rconpassword,
-        timeout: 10000
-      })
-
-      await rcon.send('status')
-      await rcon.send(`g_password ${server.UrTServerStatus.password}`)
-      await rcon.send(`g_refpass ${server.UrTServerStatus.refpass}`)
-      await rcon.send('map ut4_casa')
-      await rcon.send('reload')
-
-      if(config.server_start_commands) {
-        for(let command of config.server_start_commands) {
-          await rcon.send(command)
-        }
-      }
+      await server.configureServer()
 
       done(null, server)
     } catch(e) {
       console.error(e)
-      await server.UrTServerStatus.update({
-        status: 'FAILED1'
-      })
-      done()
+      done(e, server)
     }
   }, async (err, s) => {
     if(err) {
-      console.error(err)
-      await server.UrTServerStatus.update({
-        status: 'FAILED1'
-      })
+      if(s) {
+        await s.incrementFailed()
+        const newServer = await (await s.getDiscordServer()).findOneAvailableServerByRegion(s.region)
+        if (newServer) {
+          await newServer.queueForUser(s.UrTServerStatus.userDiscordId, {
+            password: await generatePassword(),
+            refpass: await generateRefpass()
+          })
+          startQueuingServer(newServer)
+        }
+      }
     } else if(s) {
-      await server.UrTServerStatus.update({
+      await s.UrTServerStatus.update({
         status: 'READY'
       })
     }
@@ -349,116 +285,54 @@ function startQueuingServer(server) {
 
 app.use('/bot', discordBotRouter)
 
+setInterval(changeOvertimeServerStatus, 30000)
+async function changeOvertimeServerStatus() {
+  const overtimeServerStatus = await UrTServerStatus.findAllOvertime(2 * 60 * 60 * 1000)
 
-setInterval(stopOvertimeServers, 30000)
-
-const stopOvertimeLock = new AsyncLock({ timeout: 50000 })
-async function stopOvertimeServers() {
-  const servers = await UrTServer.findAll({
-    include: [
-      {
-        model: UrTServerStatus,
-        where: {
-          status: 'IN_USE',
-          updatedAt: {
-            [Sequelize.Op.lt]: new Date(Date.now() - (2 * 60 * 60 * 1000))
-          }
-        }
-      }
-    ]
-  })
-
-  for(let server of servers) {
-    if(stopOvertimeLock.isBusy(`${ server.id }`)) continue
-
-    stopOvertimeLock.acquire(`${ server.id }`, async (done) => {
-      try {
-        await freeServer(server)
-        done()
-      } catch (e) {
-        done()
-      }
-    }, () => {})
+  for(let status of overtimeServerStatus) {
+    await status.update({
+      status: 'AFTER_USE'
+    })
   }
 }
 
-setInterval(freeFailedServers, 10000)
-
-const freeFailedLock = new AsyncLock({ timeout: 30000 })
-async function freeFailedServers() {
-  const servers = await UrTServer.findAll({
-    include: [
-      {
-        model: UrTServerStatus,
-        where: {
-          [Sequelize.Op.or]: [
-            {
-              status: {
-                [Sequelize.Op.in]: ['FAILED1', 'FAILED2']
-              }
-            },
-            {
-              status: 'FAILED3',
-              updatedAt: {
-                [Sequelize.Op.lt]: new Date(Date.now() - (2 * 60 * 60 * 1000))
-              }
-            }
-          ]
-        }
-      }
-    ]
-  })
+setInterval(cleanUsedServers, 10000)
+const unusedServerLock = new AsyncLock({ timeout: 30000 })
+async function cleanUsedServers() {
+  const servers = await UrTServer.findAllByStatus('AFTER_USE')
 
   for(let server of servers) {
-    if(freeFailedLock.isBusy(`${ server.id }`)) continue
+    if(unusedServerLock.isBusy(server.id)) continue
 
-    freeFailedLock.acquire(`${ server.id }`, async (done) => {
-      try {
-        await freeServer(server)
-        done()
-      } catch (e) {
-        done()
-      }
-    }, () => {})
-  }
-}
-
-async function freeServer(server) {
-  try {
-    const rcon = new Q3RCon({
-      address: server.ip,
-      port: server.port,
-      password: server.rconpassword,
-      timeout: 10000
-    })
-
-    await rcon.send(`g_password ${config.default_password}`)
-    await rcon.send(`g_refpass ${config.default_refpass}`)
-    await rcon.send('map ut4_casa')
-    await rcon.send('reload')
-
-    await server.UrTServerStatus.update({
-      status: 'AVAILABLE',
-      userDiscordId: null
-    })
-  } catch(e) {
-    try {
-      let newStatus = 'FAILED3'
-      if(!server.UrTServerStatus.status.startsWith('FAILED')) {
-        newStatus = 'FAILED1'
-      } else if(server.UrTServerStatus.status === 'FAILED1') {
-        newStatus = 'FAILED2'
-      }
-
-      server.UrTServerStatus.changed('updatedAt', true)
+    unusedServerLock.acquire(server.id, async () => {
+      await server.cleanUpServer()
       await server.UrTServerStatus.update({
-        status: newStatus,
-        userDiscordId: null,
-        updatedAt: new Date()
+        status: 'AVAILABLE'
       })
-    }  catch(e) {
+    }).catch(async (e) => {
+      await server.UrTServerStatus.update({
+        status: 'AFTER_USE_OFFLINE'
+      })
       console.error(e)
-    }
+    })
+  }
+}
+
+setInterval(handleAfterUseOffline, 1000 * 60 * 5)
+async function handleAfterUseOffline() {
+  const servers = await UrTServer.findAllByStatus('AFTER_USE_OFFLINE')
+
+  for(let server of servers) {
+    if(unusedServerLock.isBusy(server.id)) continue
+
+    unusedServerLock.acquire(server.id, async () => {
+      await server.cleanUpServer()
+      await server.UrTServerStatus.update({
+        status: 'AVAILABLE'
+      })
+    }).catch(async (e) => {
+      console.error(e)
+    })
   }
 }
 
@@ -467,39 +341,61 @@ if(config.say_remaining_time_interval && config.say_remaining_time_interval > 0)
 }
 
 async function sayRemainingTime() {
+  const servers = await UrTServer.findAllByStatus('IN_USE')
+
+  for(let server of servers) {
+    const remainingMs = server.UrTServerStatus.updatedAt.getTime() - (Date.now() - (2 * 60 * 60 * 1000))
+    server
+      .sayRemainingTime(remainingMs)
+      .then(() => {})
+      .catch((e) => {
+        console.error(e)
+      })
+  }
+}
+
+checkServerOnlineStatus()
+setInterval(checkServerOnlineStatus, 30000)
+const serverOnlineStatusLock = new AsyncLock({ timeout: 30000 })
+async function checkServerOnlineStatus() {
   const servers = await UrTServer.findAll({
-    include: [
-      {
-        model: UrTServerStatus,
-        where: {
-          status: 'IN_USE',
-          updatedAt: {
-            [Sequelize.Op.gt]: new Date(Date.now() - (2 * 60 * 60 * 1000))
+    include: {
+      association: 'UrTServerStatus',
+      where: {
+        [Sequelize.Op.or]: [
+          {
+            status: {
+              [Sequelize.Op.in]: ['AVAILABLE', 'OCCUPIED', 'FAILED1', 'FAILED2']
+            }
+          },
+          {
+            status: 'FAILED3',
+            updatedAt: {
+              [Sequelize.Op.lt]: new Date(Date.now() - (2 * 60 * 60 * 1000))
+            }
           }
-        }
+        ]
       }
-    ]
+    }
   })
 
   for(let server of servers) {
-    try {
-      const rcon = new Q3RCon({
-        address: server.ip,
-        port: server.port,
-        password: server.rconpassword,
-        timeout: 3000
-      })
+    if(serverOnlineStatusLock.isBusy(server.id)) continue
 
-      let remaining = server.UrTServerStatus.updatedAt.getTime() - (Date.now() - (2 * 60 * 60 * 1000))
-
-      await rcon.send(`say Time left: ${ Math.floor(remaining / 1000 / 60) } minutes.`)
-    } catch(e) {
-      console.error(e)
-    }
+    serverOnlineStatusLock.acquire(server.id, async () => {
+      await server.checkAndSetOnlineStatus()
+    })
   }
+}
+
+async function generateRefpass() {
+  return (await crypto.randomBytes(config.refpass_length)).toString('hex').substring(config.refpass_length)
+}
+
+async function generatePassword() {
+  return (await crypto.randomBytes(config.password_length)).toString('hex').substring(config.password_length)
 }
 
 app.listen(port, () => {
   console.log(`app listening at http://localhost:${port}`)
 })
-
