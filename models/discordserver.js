@@ -44,7 +44,7 @@ module.exports = (sequelize, DataTypes) => {
     findOneAvailableServerByRegion(region) {
       return this.getUrTServers({
         where: {
-          region
+          region: Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('region')), '=', region.toLowerCase())
         },
         include: { association: 'UrTServerStatus', where: { status: 'AVAILABLE' } },
         limit: 1
